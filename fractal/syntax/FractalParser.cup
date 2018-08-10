@@ -1,0 +1,208 @@
+package fractal.syntax;
+
+import java_cup.runtime.*;
+import java.io.*;
+import java.util.*;
+import fractal.values.FractalValue;
+
+/* Preliminaries to set up and use the scanner.  */
+parser code {:
+		FractalLexer lexer;
+
+		public FractalParser(FractalLexer l) {
+		    // As of CUP v0.11, need to pass Lexer to superclass
+		    super(l);
+		    lexer = l;
+		}
+
+		public void report_error(String message, Object info) {
+		    System.err.println(message);
+		}
+
+		public void syntax_error(Symbol cur_token) {
+		    System.err.print("Line " + lexer.getLine() +
+				     " near char " + lexer.getChar() + ": ");
+		    report_error("Syntax error", cur_token);
+		    System.err.println ("Encountered token " + cur_token +
+					": " + lexer.getText());
+		}
+	    :};
+
+/* Terminals (tokens returned by the scanner). */
+// keywords
+terminal FRACTAL, DEF, REN, SAVE, REST, REP, SELF, END, COMPOSE, SEQUENCE;
+
+// special symbols
+terminal LPAREN, RPAREN, COMMA, GREAT, LESS, EQUAL, LBRACE, RBRACE;
+
+//logic operators
+terminal AND, OR, NOT, COLON;
+
+// arithmetic operators
+terminal PLUS, MINUS, MUL, DIV, MOD;
+
+// turtle commands
+terminal LEFT, RIGHT, FD, BK, CLR, PU, HM, PD;
+
+// terminals with values
+terminal Integer INT;
+terminal Double REAL;
+terminal String ID;
+
+/* Non terminals */
+non terminal ASTProgram program;
+non terminal ASTStmtSequence stmtList;
+non terminal ASTStatement stmt;
+
+
+/*I added this region*/
+
+non terminal ASTDefine definition;
+non terminal ASTRender render;
+non terminal ASTSaveStmt save;
+non terminal ASTRestoreStmt restore;
+non terminal ASTRepeat repeat;
+non terminal ASTSelf self;
+non terminal ASTFractal valueExp;
+non terminal ASTFracVar fracvar;
+
+/*I added this region*/
+
+
+non terminal ASTTurtleCmd turtleCmd;
+non terminal ArrayList<ASTExp> expList;
+non terminal ASTExp expression;
+non terminal ASTExp term;
+non terminal ASTExp factor;
+non terminal FractalValue number;
+non terminal empty;
+
+/* Grammar rules */
+
+program ::= stmtList:l  {: RESULT = new ASTProgram(l); :};
+
+stmtList ::= stmtList:l stmt:s {: RESULT = l.add(s); :} |
+	     stmt:s {: RESULT = new ASTStmtSequence(s); :};
+
+stmt ::= 	definition:d {: RESULT = d; :} | 
+			render: r {: RESULT = r; :} |
+			save: s {: RESULT = s; :} |
+			restore: rest {: RESULT = rest; :} |
+			repeat: rep {: RESULT = rep; :}|
+			turtleCmd:c {: RESULT = c; :}|
+			self: self {: RESULT = self; :};
+	// finish this
+	 
+
+
+
+/*I added this region*/
+
+definition ::=DEF ID:fractalname valueExp:v
+			{: 
+			RESULT = new ASTDefine(fractalname,v); 
+			:}/*|
+			DEF ID:fractalname valueExp:first COMPOSE valueExp:second
+			{:
+			RESULT = new ASTFracCompose(first,second);
+			:}|
+			DEF ID:fractalname valueExp:first SEQUENCE valueExp:second
+			{:
+			RESULT = new ASTFracSequence(first,second);
+			:}*/;
+
+valueExp ::=FRACTAL LPAREN factor:num RPAREN COLON stmtList:v END {: RESULT = new ASTFractal(num,v.getSeq());:};
+
+fracvar ::= ID:fracname {:RESULT= new ASTFracVar(fracname);:};
+
+
+render ::=REN LBRACE factor:level RBRACE LPAREN factor:scale RPAREN valueExp:v
+			{: 
+			RESULT = new ASTRender(level,scale,v); 
+			:} |
+			REN LPAREN factor:scale RPAREN valueExp:v
+			{:
+			RESULT = new ASTRender(null,scale,v); :}|
+			REN LBRACE factor:level RBRACE LPAREN factor:scale RPAREN fracvar:f
+			{:
+			RESULT = new ASTRender(level,scale,f);
+			:} |
+			REN LPAREN factor:scale RPAREN fracvar:f
+			{:
+			RESULT = new ASTRender(null,scale,f);
+			:};
+
+
+save ::=SAVE {:RESULT = new ASTSaveStmt();:};
+
+restore ::=REST {:RESULT =new ASTRestoreStmt();:};
+
+repeat ::=REP LBRACE ID:var RBRACE factor:count COLON stmtList: body END {:RESULT =new ASTRepeat(var,count,body);:}|
+		  REP factor:count COLON stmtList: body END {:RESULT =new ASTRepeat(null,count,body);:};
+
+
+self ::=SELF {:RESULT =new ASTSelf(null); :};
+
+
+/*I added this region*/
+
+
+
+
+
+
+turtleCmd ::= LEFT expression:e {:
+	      	   RESULT = new ASTTCmdLeft(e);
+	      :} |
+	      RIGHT expression:e {:
+	      	   RESULT = new ASTTCmdRight(e);
+	      :} |
+	      HM {:
+	      	   RESULT = new ASTTCmdHome();
+	      :} |
+	      FD expression:e {:
+	      	   RESULT = new ASTTCmdForward(e);
+	      :} |
+	      BK expression:e {:
+	      	   RESULT = new ASTTCmdBack(e);
+	      :} |
+	      CLR {:
+	      	   RESULT = new ASTTCmdClear();
+	      :} |
+	      PU {:
+	      	   RESULT = new ASTTCmdPenUp();
+	      :} |
+	      PD {:
+	      	   RESULT = new ASTTCmdPenDown();
+	      :};
+	      // Add the remaining turtle commands (I changed lines 101 to 118)
+
+
+expList ::= expList:l COMMA expression:e {: l.add(e); RESULT = l; :} |
+	    expression:e {: ArrayList<ASTExp> list = new ArrayList<ASTExp>();
+	    		    list.add(e);
+			    RESULT = list;
+			 :};
+
+expression ::= 	expression:e PLUS term:t {:
+			RESULT = new ASTExpAdd(e, t); :} |
+		expression:e MINUS term:t {:
+			RESULT = new ASTExpSub(e, t); :} |
+		term:t {: RESULT = t; :};
+
+term ::= term:t MUL factor:f {:
+		RESULT = new ASTExpMul(t, f); :} |
+	 term:t DIV factor:f {:
+		RESULT = new ASTExpDiv(t, f); :} |
+	 term:t MOD factor:f {:
+		RESULT = new ASTExpMod(t, f); :} |
+	 factor:f {: RESULT = f; :};
+
+factor ::= number:ilit {: RESULT = new ASTExpLit(ilit); :} |
+           ID:v {: RESULT = new ASTExpVar(v); :} |
+	   LPAREN expression:e RPAREN {: RESULT = e; :}	;
+
+number ::= REAL:r {: RESULT = FractalValue.make(r); :}|
+	   INT:i {: RESULT = FractalValue.make(i); :};
+
+empty ::= ;
